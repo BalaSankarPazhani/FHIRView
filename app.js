@@ -886,7 +886,7 @@ function explainTips(r, matches, includes) {
 }
 
 const SUGGESTED_ELEMENTS = {
-  Patient: "name,gender,birthDate", Observation: "code,value,effective,status,subject",
+  Patient: "name,gender,birthDate", Observation: "code,value,component,effective,status,subject",
   Condition: "code,clinicalStatus,onset,subject", Encounter: "status,class,type,period,subject",
   MedicationRequest: "medication,status,dosageInstruction,subject", Appointment: "status,start,end,participant",
   Practitioner: "name", Organization: "name",
@@ -1063,7 +1063,7 @@ function examples() {
   return [
     ["Latest patients", "Patient?_sort=-_lastUpdated&_count=10"],
     ["Patients, names and birth dates only", "Patient?_elements=name,gender,birthDate&_count=20"],
-    ["Latest vital signs with their patients", "Observation?category=vital-signs&_sort=-date&_count=20&_include=Observation:subject&_elements=Observation.code,Observation.value,Observation.effective,Observation.subject,Patient.name"],
+    ["Latest vital signs with their patients", "Observation?category=vital-signs&_sort=-date&_count=20&_include=Observation:subject&_elements=Observation.code,Observation.value,Observation.component,Observation.effective,Observation.subject,Patient.name"],
     ["HbA1c results (LOINC 4548-4)", "Observation?code=http://loinc.org|4548-4&_sort=-date&_count=20"],
     ["Active conditions", "Condition?clinical-status=active&_count=20"],
     ["Active prescriptions", "MedicationRequest?status=active&_count=20"],
@@ -1147,7 +1147,10 @@ function init() {
   $("sort").addEventListener("change", (e) => { state.sort = e.target.value; updateRaw(); });
   $("sort-dir").addEventListener("change", (e) => { state.sortDir = e.target.value; updateRaw(); });
   $("count").addEventListener("input", (e) => { state.count = Math.min(1000, Math.max(1, Number(e.target.value) || 20)); updateRaw(); });
-  $("run").addEventListener("click", runQuery);
+  // Find runs what the Query box says: if it was edited by hand, it is parsed back into the builder first.
+  $("run").addEventListener("click", () => {
+    if (state.type && $("raw").value.trim() !== buildQuery()) runRaw(); else runQuery();
+  });
   $("reset").addEventListener("click", () => state.type && selectType(state.type, false));
   $("curl").addEventListener("click", copyCurl);
   $("raw").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); runRaw(); } });
