@@ -929,6 +929,9 @@ async function leaner() {
       h("td", { text: r.ok ? String(matches.length) : `HTTP ${r.status}` })));
   }
   t.append(tb);
+  if (results.slice(1).some(({ r }) => r.bytes >= full)) {
+    out.append(h("p", { class: "note", text: "Projection made some variants bigger: these resources are already small, and the server adds a SUBSETTED tag to each one it trims. Projection pays off on rich resources (e.g. Synthea patients with narrative text and many identifiers)." }));
+  }
   out.append(t, h("p", { class: "muted small", text: "Smaller payloads matter most on slow clinic Wi-Fi and phones. _elements results are marked SUBSETTED: use them to display, never to edit and save back." }));
 }
 
