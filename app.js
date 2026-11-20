@@ -597,7 +597,9 @@ function render() {
   for (const o of outcomes) out.append(outcomeBox(o, r.status));
   if (r.json.resourceType === "Bundle") {
     const total = typeof r.json.total === "number" ? ` of ${r.json.total.toLocaleString()}` : "";
-    out.append(h("p", { class: "muted small", text: `${matches.length}${total} shown${includes.length ? ` · ${includes.length} included` : ""}` }));
+    const off = Number(/[?&](?:_offset|_getpagesoffset)=(\d+)/.exec(r.url)?.[1] || 0);
+    const range = matches.length ? (off ? `${off + 1}–${off + matches.length}` : `${matches.length}`) : "0";
+    out.append(h("p", { class: "muted small", text: `${off ? "Showing " : ""}${range}${total}${off ? "" : " shown"}${includes.length ? ` · ${includes.length} included` : ""}` }));
   }
   updateElementChips(matches);
 
