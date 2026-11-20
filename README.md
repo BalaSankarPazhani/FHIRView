@@ -49,5 +49,4 @@ add its origin to `connect-src` in `index.html` and to `SERVERS` in `app.js`.
 
 ## Credits
 
-Built by Bala Sankar Pazhani with Claude, alongside **Phoenix**, a single-doctor clinic EHR for the Medblocks FHIR
-challenge. MIT licence.
+Built by Bala Sankar Pazhani with Claude during the Medblocks FHIR bootcamp. MIT licence.
