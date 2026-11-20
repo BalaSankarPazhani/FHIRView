@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    The browser enforces this policy: the page may only send requests to the two FHIR servers
+    listed in connect-src. Your token cannot be sent anywhere else, even by a bug in app.js.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://challenge.fhir.medblocks.com https://hapi.fhir.org; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="A read-only, Compass-style query tool for FHIR R4 servers. Runs entirely in your browser.">
+  <title>FHIRView · query lab</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230e5c63'/%3E%3Cpath d='M9 23V9h13M9 16h9' stroke='%23f4b942' stroke-width='3.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo" aria-hidden="true">F</span> FHIRView <span class="muted">query lab</span></div>
+    <div id="conn-status" class="conn" aria-live="polite">Not connected</div>
+    <button id="disconnect" class="btn ghost" hidden>Disconnect</button>
+  </header>
+
+  <!-- Connect screen -->
+  <main id="connect-view" class="connect">
+    <section class="card connect-card">
+      <h1>Connect to a FHIR server</h1>
+      <p class="muted">Read-only. Everything runs in this page; requests go straight from your browser to the
+        server. Your token stays in memory and is gone when you close the tab.</p>
+
+      <form id="connect-form" autocomplete="off">
+        <fieldset class="server-pick">
+          <legend>Server</legend>
+          <label class="radio"><input type="radio" name="server" value="medblocks" checked>
+            <span><strong>Medblocks challenge</strong> <span class="muted">— your tenant URL and token</span></span></label>
+          <label class="radio"><input type="radio" name="server" value="hapi">
+            <span><strong>HAPI public test server</strong> <span class="muted">— no token, public data, try it out</span></span></label>
+        </fieldset>
+
+        <div id="medblocks-fields">
+          <label for="base-url">Base URL</label>
+          <input id="base-url" type="url" spellcheck="false" placeholder="https://challenge.fhir.medblocks.com/fhir/…" required>
+          <p class="hint">The full URL from the challenge dashboard, including your tenant segment.</p>
+
+          <label for="token">Bearer token</label>
+          <input id="token" type="password" spellcheck="false" autocomplete="off" required>
+          <p class="hint">Never saved, never put in a URL, never logged. "Copy as curl" writes <code>$FHIR_TOKEN</code> instead.</p>
+        </div>
+
+        <p id="connect-error" class="error" role="alert" hidden></p>
+        <button type="submit" class="btn primary" id="connect-btn">Connect</button>
+      </form>
+
+      <details class="why">
+        <summary>Why can't I enter any server?</summary>
+        <p>This page carries a Content-Security-Policy that lets the browser talk only to
+          <code>challenge.fhir.medblocks.com</code> and <code>hapi.fhir.org</code>. That is what makes it safe to
+          paste a token here: even a bug in this page could not send it anywhere else. To use another server,
+          fork the repository and add it to the policy in <code>index.html</code>.</p>
+      </details>
+    </section>
+  </main>
+
+  <!-- Workspace -->
+  <div id="workspace" class="workspace" hidden>
+    <nav class="sidebar" aria-label="Resource types">
+      <input id="type-filter" type="search" placeholder="Filter resource types" spellcheck="false" aria-label="Filter resource types">
+      <div class="side-actions">
+        <button id="count-all" class="btn tiny ghost" title="Count every resource type listed (one small request each, four at a time)">Count all</button>
+      </div>
+      <h2 class="side-h">Common</h2>
+      <ul id="types-common" class="types"></ul>
+      <h2 class="side-h">All types</h2>
+      <ul id="types-all" class="types"></ul>
+    </nav>
+
+    <main class="main">
+      <div class="main-head">
+        <h1 id="current-type">Pick a resource type</h1>
+        <div class="tabs" role="tablist">
+          <button role="tab" class="tab" data-tab="documents" aria-selected="true">Documents</button>
+          <button role="tab" class="tab" data-tab="schema" aria-selected="false">Schema</button>
+          <button role="tab" class="tab" data-tab="explain" aria-selected="false">Explain</button>
+        </div>
+      </div>
+
+      <!-- Query builder -->
+      <section class="builder card" aria-label="Query builder">
+        <div class="row">
+          <span class="lbl">Filter</span>
+          <div class="grow">
+            <div id="filters"></div>
+            <button id="add-filter" class="btn tiny ghost">+ Add filter</button>
+          </div>
+        </div>
+        <div class="row">
+          <span class="lbl">Project</span>
+          <div class="grow">
+            <input id="elements" list="element-list" spellcheck="false" placeholder="_elements, e.g. name,gender,birthDate">
+            <datalist id="element-list"></datalist>
+            <label class="check"><input type="checkbox" id="summary-true"> <code>_summary=true</code></label>
+          </div>
+        </div>
+        <div class="row three">
+          <div><span class="lbl">Sort</span>
+            <select id="sort"><option value="">— none —</option></select>
+            <select id="sort-dir" aria-label="Sort direction"><option value="">asc</option><option value="-">desc</option></select>
+          </div>
+          <div><span class="lbl">Limit</span> <input id="count" type="number" min="1" max="1000" value="20" aria-label="_count"></div>
+          <div class="grow"><span class="lbl">Include</span>
+            <details class="multi" id="include-box"><summary>None</summary><div class="multi-list" id="include-list"></div></details>
+            <details class="multi" id="revinclude-box"><summary>Rev-include: none</summary><div class="multi-list" id="revinclude-list"></div></details>
+          </div>
+        </div>
+        <div class="row raw">
+          <span class="lbl">Query</span>
+          <div class="grow rawwrap">
+            <span class="base">[base]/</span>
+            <input id="raw" spellcheck="false" aria-label="Raw query, editable">
+          </div>
+        </div>
+        <div class="row actions">
+          <button id="run" class="btn primary">Find</button>
+          <button id="reset" class="btn ghost">Reset</button>
+          <button id="curl" class="btn ghost" title="Copies a curl command; the token is written as $FHIR_TOKEN">Copy as curl</button>
+          <details class="examples"><summary class="btn ghost">Examples ▾</summary><ul id="examples"></ul></details>
+          <details class="examples"><summary class="btn ghost">History ▾</summary><ul id="history"></ul></details>
+          <span id="builder-note" class="note"></span>
+        </div>
+      </section>
+
+      <!-- Request line -->
+      <div id="reqline" class="reqline" hidden></div>
+
+      <section id="tab-documents" class="tabpanel">
+        <div class="viewbar">
+          <div class="seg" role="group" aria-label="View">
+            <button class="segbtn" data-view="list" aria-pressed="true">List</button>
+            <button class="segbtn" data-view="table" aria-pressed="false">Table</button>
+            <button class="segbtn" data-view="json" aria-pressed="false">JSON</button>
+          </div>
+          <div class="pager">
+            <button id="back" class="btn tiny ghost" hidden>← Back</button>
+            <button id="prev" class="btn tiny ghost" disabled>‹ Prev</button>
+            <button id="next" class="btn tiny ghost" disabled>Next ›</button>
+            <button id="total" class="btn tiny ghost" title="Runs the same search with _summary=count">Count total</button>
+          </div>
+        </div>
+        <div id="results" class="results"><p class="empty">Pick a resource type on the left, then Find.</p></div>
+      </section>
+
+      <section id="tab-schema" class="tabpanel" hidden>
+        <div class="viewbar"><p class="muted">Samples up to 100 resources that match the current filters and shows
+          which fields are filled in, and the most common codes.</p>
+          <button id="analyse" class="btn primary tiny">Analyse sample</button></div>
+        <div id="schema" class="schema"></div>
+      </section>
+
+      <section id="tab-explain" class="tabpanel" hidden>
+        <div id="explain" class="explain"><p class="empty">Run a query to see what was sent and what came back.</p></div>
+        <div class="card leaner">
+          <h2>Make it leaner</h2>
+          <p class="muted">Runs the current query three ways, one after another: as is without projection, with
+            <code>_summary=true</code>, and with your <code>_elements</code> (or a suggested set). Bytes are exact;
+            times vary from run to run.</p>
+          <button id="leaner" class="btn primary tiny">Compare</button>
+          <div id="leaner-out"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="foot">
+    Read-only (GET only) · No data leaves your browser except to the server you connected to ·
+    <a href="https://github.com/BalaSankarPazhani/FHIRView" rel="noopener noreferrer">Source</a>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
